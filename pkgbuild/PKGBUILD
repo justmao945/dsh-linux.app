@@ -1,0 +1,20 @@
+# Maintainer: just <just@local>
+pkgname=dsh-web
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Desktop shell for the DeepSeek Harness web UI: one app window, one background server'
+arch=(any)
+url=''
+license=(MIT)
+depends=(bash chromium util-linux)
+optdepends=('@deepseek-ai/dsh: the dsh CLI, available on PATH (npm/mise install)'
+	'wlrctl: focus the running window on a second launch')
+source=(dsh-web dsh-web.desktop dsh-web.svg LICENSE)
+sha256sums=(SKIP SKIP SKIP SKIP)
+
+package() {
+	install -Dm755 dsh-web "$pkgdir/usr/bin/dsh-web"
+	install -Dm644 dsh-web.desktop "$pkgdir/usr/share/applications/dsh-web.desktop"
+	install -Dm644 dsh-web.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/dsh-web.svg"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

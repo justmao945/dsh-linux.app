@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#14161A"/>
+  <!-- shell prompt: chevron plus underscore -->
+  <path d="M34 42 L58 64 L34 86" fill="none" stroke="#FFD60A" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="66" y="79" width="30" height="11" rx="5.5" fill="#FFFFFF"/>
+</svg>

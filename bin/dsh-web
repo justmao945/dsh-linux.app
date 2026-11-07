@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# dsh-web: desktop shell for `dsh web`.
+# Runs the DSH web server in the background and shows it in a single
+# chromeless chromium app window that looks and behaves like a local app.
+# Closing the window stops the server; if the server dies, the window goes
+# with it. A second launch just raises the existing window.
+set -u
+
+NAME=dsh-web
+CLASS=$NAME
+STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/$NAME
+LOG=$STATE_DIR/web.log
+LOCK=${XDG_RUNTIME_DIR:-/tmp}/$NAME.lock
+CHROME_PROFILE=$STATE_DIR/chromium
+
+mkdir -p "$STATE_DIR"
+
+notify() { command -v notify-send >/dev/null 2>&1 && notify-send "$NAME" "$1"; }
+die() { notify "$1"; printf '%s: %s\n' "$NAME" "$1" >&2; exit 1; }
+
+# --- single instance: if we already run, raise the window and leave ---------
+exec 9>"$LOCK"
+if ! flock -n 9; then
+	# chromium derives its Wayland app id from the URL host and profile dir
+	APP_ID="chrome-127.0.0.1__-$CLASS"
+	if command -v wlrctl >/dev/null 2>&1; then
+		wlrctl toplevel focus "app_id:$APP_ID" >/dev/null 2>&1 ||
+			wlrctl toplevel focus "title:DeepSeek Harness" >/dev/null 2>&1
+	elif command -v hyprctl >/dev/null 2>&1; then
+		# broken on Hyprland 0.56.x with Lua configs (hyprwm/Hyprland discussion 16224)
+		hyprctl dispatch focuswindow "class:.*$CLASS" >/dev/null 2>&1
+	fi
+	exit 0
+fi
+
+# --- locate the dsh CLI (a .desktop Exec has no shell PATH guarantees) ------
+DSH=$(command -v dsh 2>/dev/null || true)
+if [[ -z $DSH ]]; then
+	for c in "$HOME/.local/share/mise/shims/dsh" "$HOME/.local/bin/dsh" /usr/local/bin/dsh /usr/bin/dsh; do
+		if [[ -x $c ]]; then DSH=$c; break; fi
+		done
+	fi
+[[ -n $DSH ]] || die "dsh CLI not found on PATH (is @deepseek-ai/dsh installed?)"
+command -v chromium >/dev/null 2>&1 || die "chromium not found (dsh-web depends on it)"
+
+WEB_PID=
+CHROME_PID=
+cleanup() {
+	trap '' EXIT INT TERM
+	for pid in "$CHROME_PID" "$WEB_PID"; do
+		[[ -n $pid ]] || continue
+		kill -TERM "$pid" 2>/dev/null
+		# dsh runs in its own process group (setsid), so take its children too
+		kill -TERM -- -$pid 2>/dev/null
+	done
+	for pid in "$CHROME_PID" "$WEB_PID"; do
+		[[ -n $pid ]] || continue
+		for _ in 1 2 3 4 5 6 7 8 9 10; do
+			kill -0 "$pid" 2>/dev/null || break
+			sleep 0.1
+		done
+		kill -KILL "$pid" 2>/dev/null
+		kill -KILL -- -$pid 2>/dev/null
+	done
+	return 0
+}
+trap cleanup EXIT INT TERM
+
+# --- start the server; the OS picks a free port -----------------------------
+# stdout carries the printed URL, e.g. "dsh web: http://127.0.0.1:46019/?token=..."
+setsid "$DSH" web --no-open --port 0 "$@" >"$LOG" 2>&1 &
+WEB_PID=$!
+
+URL=
+for _ in $(seq 1 240); do
+	URL=$(sed -n 's/^dsh web: \(http[^ ]*\).*/\1/p' "$LOG" 2>/dev/null | head -1)
+	[[ -n $URL ]] && break
+	kill -0 "$WEB_PID" 2>/dev/null || die "dsh web exited before serving (see $LOG)"
+	sleep 0.25
+done
+[[ -n $URL ]] || die "dsh web did not print a URL in 60s (see $LOG)"
+
+# --- one chromeless window, own profile, our app id -------------------------
+chromium \
+	--ozone-platform-hint=auto \
+	--class=$CLASS \
+	--user-data-dir=$CHROME_PROFILE \
+	--profile-directory=$CLASS \
+	--no-first-run \
+	--no-default-browser-check \
+	--hide-crash-restore-bubble \
+	--app=$URL &
+CHROME_PID=$!
+
+# whichever side ends first, take the other down with us
+wait -n "$WEB_PID" "$CHROME_PID"

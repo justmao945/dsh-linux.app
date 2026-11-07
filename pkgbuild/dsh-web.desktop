@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=DSH Web
+Name[zh-CN]=DSH Web
+GenericName=DeepSeek Harness
+Comment=DeepSeek Harness web UI in a desktop window
+Comment[zh-CN]=以桌面窗口运行 DeepSeek Harness 网页界面
+Exec=dsh-web
+TryExec=dsh-web
+Icon=dsh-web
+Terminal=false
+Categories=Development;Network;
+StartupWMClass=chrome-127.0.0.1__-dsh-web
+StartupNotify=true
